@@ -83,3 +83,16 @@ button.ghost { background: transparent; border: 1px dashed #283146; color: var(-
 @media (max-width: 1100px) {
   body { grid-template-columns: 1fr; grid-template-areas: "toolbar" "canvas" "sidebar" "inspector"; }
 }
+
+.node.dimmed circle { opacity: 0.15; }
+.node.dimmed + text, .node-label.dimmed { opacity: 0.1; }
+.link.dimmed { opacity: 0.1; }
+
+.legend-item { opacity: 0.55; filter: grayscale(0.3); }
+.legend-item.selected { border-width: 3px; opacity: 1; filter: none; border-color: #38bdf8; }
+.legend-item.unselected { border-width: 1px; opacity: 0.25; filter: grayscale(0.8); }
+
+.node.neighbor circle { stroke: var(--accent); stroke-width: 3px; }
+
+.link.neighbor { stroke-opacity: 0.9; }
+.link.dimmed { opacity: 0.1; }

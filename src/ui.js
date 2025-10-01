@@ -11,8 +11,27 @@ export function mountUI(graph) {
   closeMenu.onclick = () => { menu.classList.remove('open'); menu.setAttribute('aria-hidden', 'true'); };
   document.addEventListener('click', (e) => { if (!menu.contains(e.target) && e.target.id !== 'menuBtn') { menu.classList.remove('open'); menu.setAttribute('aria-hidden','true'); } });
 
+  // Reset visualization
+  document.getElementById('btnResetVis').onclick = () => graph.reset();
+
+  // Export
+  document.getElementById('btnExportSVG').onclick = () => graph.exportSVG();
+  document.getElementById('btnExportPNG').onclick = () => graph.exportPNG();
+
   // Load sample
   document.getElementById('loadSample').onclick = () => { graph.setData(sampleData.nodes, sampleData.links); };
+
+  // Layout save/load
+  document.getElementById('btnSaveLayout').onclick = () => {
+    const layout = graph.getLayout();
+    const blob = new Blob([JSON.stringify(layout, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'layout.json'; a.click();
+  };
+  document.getElementById('fileLayout').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const text = await f.text();
+    try { const layout = JSON.parse(text); graph.applyLayout(layout); } catch (err) { alert('Invalid layout JSON'); }
+  });
 
   // Load files
   document.getElementById('btnLoadFiles').onclick = async () => {

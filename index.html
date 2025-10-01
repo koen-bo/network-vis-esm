@@ -34,6 +34,24 @@
         <button id="btnLoadFiles" class="primary">Load files</button>
         <button id="closeMenu">Close</button>
       </div>
+      <div class="row wrap" style="margin-top:10px; gap: 8px;">
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label class="label">Export</label>
+          <div class="row">
+            <button id="btnExportSVG">Export SVG</button>
+            <button id="btnExportPNG" class="ghost">Export PNG</button>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label class="label">Layout</label>
+          <div class="row">
+            <button id="btnSaveLayout">Save layout</button>
+            <input id="fileLayout" type="file" accept=".json" />
+          </div>
+          <div class="hint">Layout saves node x/y positions per id.</div>
+        </div>
+      </div>
       <details style="margin-top:8px;">
         <summary class="hint">CSV format help</summary>
         <div class="footer">
@@ -79,6 +97,7 @@
         </div>
       </div>
       <div class="legend-controls">
+        <button id="btnResetVis" class="ghost">Reset visualization</button>
         <button id="btnSelectAll" class="ghost">Select all</button>
         <button id="btnUnselectAll" class="ghost">Unselect all</button>
       </div>
