@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Network Visualization (D3 + ES Modules)</title>
+  <link rel="stylesheet" href="./styles/app.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <h1>Interactive Network Visualization <span class="badge">D3.js</span></h1>
+    <span class="pill">Force-directed</span>
+    <span class="pill">Search + Filters</span>
+    <button id="menuBtn" class="hamburger" aria-label="Open menu">☰</button>
+    <div id="menu" class="menu" role="menu" aria-hidden="true">
+      <h4>Data</h4>
+      <div class="row wrap" style="gap:10px;">
+        <button id="loadSample" class="ghost">Load sample data</button>
+      </div>
+      <div style="height:8px"></div>
+      <div class="row wrap">
+        <div>
+          <label class="label">Nodes file</label>
+          <input id="fileNodes" type="file" accept=".csv,.json" />
+          <div class="hint">nodes.csv or nodes.json</div>
+        </div>
+        <div>
+          <label class="label">Links file</label>
+          <input id="fileLinks" type="file" accept=".csv,.json" />
+          <div class="hint">links.csv or links.json</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button id="btnLoadFiles" class="primary">Load files</button>
+        <button id="closeMenu">Close</button>
+      </div>
+      <details style="margin-top:8px;">
+        <summary class="hint">CSV format help</summary>
+        <div class="footer">
+          <div><b>nodes.csv</b> — columns: <code>id,name,group,role,region,…</code></div>
+          <div><b>links.csv</b> — columns: <code>source,target,weight,type,…</code></div>
+          <div>Headers are case-sensitive. Extra columns become searchable/filterable attributes.</div>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="panel">
+      <div class="row wrap" style="gap:10px;">
+        <div style="flex:1; min-width:180px;">
+          <label class="label" for="search">Search nodes</label>
+          <input id="search" list="suggestions" placeholder="Type a name…" />
+          <datalist id="suggestions"></datalist>
+        </div>
+        <div class="row" style="align-items:flex-end;">
+          <button id="btnClearSearch">Clear</button>
+          <button id="btnFocusSelected" class="primary">Focus</button>
+        </div>
+      </div>
+      <p class="hint">Start typing to see suggestions. Press <kbd>Enter</kbd> to center & highlight the node.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row wrap" style="gap:10px; align-items:flex-end;">
+        <div style="flex:1; min-width:160px;">
+          <label class="label">Color nodes by</label>
+          <select id="colorAttr"></select>
+        </div>
+      </div>
+      <p class="hint">Choose any attribute (e.g., group, role, region) to drive colors & legend.</p>
+    </div>
+
+    <div class="panel">
+      <div class="row wrap" style="gap:10px; align-items:flex-end;">
+        <div style="flex:1; min-width:160px;">
+          <label class="label">Filter by attribute</label>
+          <select id="filterAttr"></select>
+        </div>
+      </div>
+      <div class="legend-controls">
+        <button id="btnSelectAll" class="ghost">Select all</button>
+        <button id="btnUnselectAll" class="ghost">Unselect all</button>
+      </div>
+      <div id="legend" class="legend"></div>
+      <p class="hint">Click colored pills to toggle visibility. Selected = thick border. Filtering hides nodes, labels, and any edges touching hidden nodes.</p>
+    </div>
+
+    <div class="footer">Tip: drag nodes to pin; double-click a node to unpin. Use the ☰ menu to load data.</div>
+  </aside>
+
+  <main class="canvas" id="canvas">
+    <svg id="svg" width="100%" height="100%" viewBox="0 0 1200 800"></svg>
+    <div class="tooltip" id="tooltip"></div>
+  </main>
+
+  <aside class="inspector" id="inspector">
+    <h3 style="margin-top:0;">Node details</h3>
+    <div id="details" class="kv"></div>
+  </aside>
+
+  <!-- D3.js (global) -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <!-- App entry -->
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+
+:root {
+  --bg: #0f172a;
+  --panel: #111827;
+  --muted: #94a3b8;
+  --text: #e5e7eb;
+  --accent: #38bdf8;
+  --accent-2: #a78bfa;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 320px 1fr 360px;
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "sidebar canvas inspector";
+  gap: 12px;
+  padding: 12px;
+}
+.toolbar {
+  grid-area: toolbar;
+  background: var(--panel);
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  position: relative;
+}
+.toolbar h1 { font-size: 16px; margin: 0; letter-spacing: 0.4px; color: var(--muted); font-weight: 600; }
+.badge { padding: 2px 8px; border-radius: 999px; background: #0b1220; border: 1px solid #172036; color: var(--accent); font-weight: 600; }
+.pill { padding: 4px 8px; border-radius: 999px; background: #0b1220; border: 1px solid #283146; font-size: 12px; color: var(--muted); }
+
+.hamburger { margin-left:auto; background: #0b1220; border: 1px solid #172036; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+.menu { position: absolute; right: 8px; top: 52px; width: 360px; background: #0b1220; border: 1px solid #283146; border-radius: 12px; padding: 12px; display: none; z-index: 10; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+.menu.open { display: block; }
+.menu h4 { margin: 6px 0 8px; font-size: 14px; color: var(--muted); }
+.menu .row { display: flex; gap: 8px; align-items: center; }
+.menu .hint { color: var(--muted); font-size: 12px; }
+
+.sidebar { grid-area: sidebar; background: var(--panel); border: 1px solid #1f2937; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.inspector { grid-area: inspector; background: var(--panel); border: 1px solid #1f2937; border-radius: 14px; padding: 14px; overflow: auto; }
+.canvas { grid-area: canvas; background: #0b1020; border: 1px solid #1f2937; border-radius: 14px; position: relative; min-height: 400px; }
+
+.row { display: flex; align-items: center; gap: 8px; }
+.row.wrap { flex-wrap: wrap; }
+.label { font-size: 12px; color: var(--muted); }
+input, select, button { background: #0b1220; color: var(--text); border: 1px solid #172036; border-radius: 10px; padding: 8px 10px; font-size: 14px; }
+input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+button { cursor: pointer; font-weight: 600; }
+button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: none; }
+button.ghost { background: transparent; border: 1px dashed #283146; color: var(--muted); }
+
+.panel { border: 1px solid #1f2937; border-radius: 12px; padding: 10px; background: #0b1220; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.legend-item { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: #0b1220; border: 1.5px solid #283146; cursor: pointer; user-select: none; }
+.legend-item .swatch { width: 12px; height: 12px; border-radius: 3px; }
+.legend-item.selected { border-width: 3px; }
+.legend-controls { display:flex; gap:8px; margin-bottom:8px; }
+
+.node-label { font-size: 11px; pointer-events: none; fill: #cbd5e1; text-shadow: 0 1px 2px #000; }
+.node { cursor: pointer; }
+.node circle { stroke: #0b1220; stroke-width: 1.5px; }
+.link { stroke: #334155; stroke-opacity: 0.6; }
+.hidden { display: none; }
+.highlight { stroke: var(--accent); stroke-width: 3px; }
+
+.tooltip { position: absolute; pointer-events: none; background: #0b1220; border: 1px solid #283146; padding: 6px 8px; border-radius: 8px; font-size: 12px; color: var(--text); opacity: 0; transition: opacity 0.1s ease; }
+
+.footer { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.kv { display: grid; grid-template-columns: 120px 1fr; gap: 4px 8px; }
+.kv div { padding: 2px 0; }
+.title-name { font-size: 16px; font-weight: 700; margin-bottom: 6px; grid-column: 1 / -1; }
+
+@media (max-width: 1100px) {
+  body { grid-template-columns: 1fr; grid-template-areas: "toolbar" "canvas" "sidebar" "inspector"; }
+}
