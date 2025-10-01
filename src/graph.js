@@ -189,7 +189,7 @@ export class Graph {
     this.selectNode(target);
     const k = CONFIG.ui.focusScale;
     const width = this.svg.node().clientWidth, height = this.svg.node().clientHeight;
-    const t = d3.zoomIdentity.scale(k).translate(width/(2*k) - target.x, height/(2*k) - target.y);
+    const t = d3.zoomIdentity.translate(width/2, height/2).scale(k).translate(-target.x, -target.y);
     this.svg.transition().duration(700).call(this.zoom.transform, t);
     this.nodeSel.selectAll('circle').classed('highlight', n => n.id === target.id);
     return true;
