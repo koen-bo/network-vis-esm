@@ -99,8 +99,8 @@ export class Graph {
       .attr('class', 'node')
       .call(d3.drag().on('start', (ev,d)=>this.dragstarted(ev,d)).on('drag', (ev,d)=>this.dragged(ev,d)).on('end', (ev,d)=>this.dragended(ev,d)))
       .on('click', (_, d) => this.selectNode(d))
-      .on('mouseover', (_, d) => { this.showTooltip(d); this.highlightNeighbors(d.id); })
-      .on('mouseout', () => { this.hideTooltip(); this.clearHighlight(); })
+      .on('mouseover', (_, d) => { this.highlightNeighbors(d.id); })
+      .on('mouseout', () => { this.clearHighlight(); })
       .on('dblclick', (_, d) => { d.fx = null; d.fy = null; this.sim.alpha(0.7).restart(); });
 
     nodeEnter.append('circle')
@@ -189,8 +189,7 @@ export class Graph {
     this.selectNode(target);
     const k = CONFIG.ui.focusScale;
     const width = this.svg.node().clientWidth, height = this.svg.node().clientHeight;
-    // Absolute transform: center -> scale -> translate(-x,-y)
-    const t = d3.zoomIdentity.translate(width/2, height/2).scale(k).translate(-target.x, -target.y);
+    const t = d3.zoomIdentity.scale(k).translate(width/(2*k) - target.x, height/(2*k) - target.y);
     this.svg.transition().duration(700).call(this.zoom.transform, t);
     this.nodeSel.selectAll('circle').classed('highlight', n => n.id === target.id);
     return true;
@@ -233,17 +232,9 @@ export class Graph {
     this.linkSel.classed('dimmed', false).classed('neighbor', false);
   }
 
-  // Export helpers
-  removeLabelsForExport(clone) {
-    // remove all text labels from a cloned svg before export
-    const texts = clone.querySelectorAll('text');
-    texts.forEach(t => t.parentNode.removeChild(t));
-  }
-
   exportSVG() {
     const svgNode = this.svg.node();
     const clone = svgNode.cloneNode(true);
-    this.removeLabelsForExport(clone);
     const serializer = new XMLSerializer();
     let source = serializer.serializeToString(clone);
     if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
@@ -259,7 +250,6 @@ export class Graph {
   exportPNG(scale = 2) {
     const svgNode = this.svg.node();
     const clone = svgNode.cloneNode(true);
-    this.removeLabelsForExport(clone);
     const serializer = new XMLSerializer();
     let source = serializer.serializeToString(clone);
     if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
