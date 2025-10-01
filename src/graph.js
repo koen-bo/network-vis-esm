@@ -99,8 +99,8 @@ export class Graph {
       .attr('class', 'node')
       .call(d3.drag().on('start', (ev,d)=>this.dragstarted(ev,d)).on('drag', (ev,d)=>this.dragged(ev,d)).on('end', (ev,d)=>this.dragended(ev,d)))
       .on('click', (_, d) => this.selectNode(d))
-      .on('mouseover', (_, d) => this.showTooltip(d))
-      .on('mouseout', () => this.hideTooltip())
+      .on('mouseover', (_, d) => { this.showTooltip(d); this.highlightNeighbors(d.id); })
+      .on('mouseout', () => { this.hideTooltip(); this.clearHighlight(); })
       .on('dblclick', (_, d) => { d.fx = null; d.fy = null; this.sim.alpha(0.7).restart(); });
 
     nodeEnter.append('circle')
