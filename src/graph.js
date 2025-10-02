@@ -40,6 +40,9 @@ export class Graph {
     this.selectedFilterValues = new Set();
     this.colorScale = () => '#94a3b8';
 
+    // radius provider (can be overridden by UI)
+    this.radiusProvider = (d) => hooks.nodeRadius(d);
+
     this.zoom = d3.zoom().scaleExtent([CONFIG.ui.zoomMin, CONFIG.ui.zoomMax]).on('zoom', (event) => {
       this.g.attr('transform', event.transform);
     });
@@ -49,7 +52,7 @@ export class Graph {
       .force('link', d3.forceLink().id(d => d.id).distance(CONFIG.forces.linkDistance))
       .force('charge', d3.forceManyBody().strength(CONFIG.forces.charge))
       .force('center', d3.forceCenter(600, 400))
-      .force('collide', d3.forceCollide().radius(d => CONFIG.forces.collide));
+      .force('collide', d3.forceCollide().radius(d => this.radiusProvider(d) + 2));
 
     this.linkSel = null;
     this.nodeSel = null;
@@ -67,6 +70,7 @@ export class Graph {
     this.rebuildColorScale();
 
     this.draw();
+    this.buildNeighborSets();
     this.populateSearch();
     this.buildLegendAndFilters();
   }
@@ -99,12 +103,12 @@ export class Graph {
       .attr('class', 'node')
       .call(d3.drag().on('start', (ev,d)=>this.dragstarted(ev,d)).on('drag', (ev,d)=>this.dragged(ev,d)).on('end', (ev,d)=>this.dragended(ev,d)))
       .on('click', (_, d) => this.selectNode(d))
-      .on('mouseover', (_, d) => { this.highlightNeighbors(d.id); })
-      .on('mouseout', () => { this.clearHighlight(); })
+      .on('mouseover', (_, d) => { this.showTooltip(d); this.highlightNeighbors(d.id); })
+      .on('mouseout', () => { this.hideTooltip(); this.clearHighlight(); })
       .on('dblclick', (_, d) => { d.fx = null; d.fy = null; this.sim.alpha(0.7).restart(); });
 
     nodeEnter.append('circle')
-      .attr('r', d => hooks.nodeRadius(d))
+      .attr('r', d => this.radiusProvider(d))
       .attr('fill', d => this.colorScale(d[this.colorAttr]));
 
     this.nodeSel = nodeEnter.merge(this.nodeSel);
@@ -125,7 +129,7 @@ export class Graph {
     this.sim.alpha(1).restart();
 
     this.applyFilters();
-    this.recolorNodes(); // ensure colors match current colorAttr
+    this.recolorNodes();
   }
 
   ticked() {
@@ -167,21 +171,6 @@ export class Graph {
     kv.appendChild(key); kv.appendChild(val);
   }
 
-  // simple fuzzy scoring (substring > prefix > levenshtein-like token starts)
-  fuzzyFindNode(query) {
-    const q = query.toLowerCase();
-    // exact by name or id
-    let exact = this.nodes.find(n => (n.name ?? n.id).toLowerCase() === q) || this.nodes.find(n => n.id.toLowerCase() === q);
-    if (exact) return exact;
-    // substring
-    let sub = this.nodes.find(n => (n.name ?? n.id).toLowerCase().includes(q));
-    if (sub) return sub;
-    // prefix
-    let pre = this.nodes.find(n => (n.name ?? n.id).toLowerCase().startsWith(q));
-    if (pre) return pre;
-    return null;
-  }
-
   focusOnNodeByName(name) {
     let target = this.nodes.find(n => (n.name ?? n.id).toLowerCase() === name.toLowerCase());
     if (!target) target = this.fuzzyFindNode(name);
@@ -195,16 +184,19 @@ export class Graph {
     return true;
   }
 
-  // Public API used by UI
-  recolor(attr) {
-    this.colorAttr = attr;
-    this.rebuildColorScale();
-    this.recolorNodes();
-    this.buildLegendAndFilters(); // legend uses colors
+  // simple fuzzy
+  fuzzyFindNode(query) {
+    const q = query.toLowerCase();
+    let exact = this.nodes.find(n => (n.name ?? n.id).toLowerCase() === q) || this.nodes.find(n => n.id.toLowerCase() === q);
+    if (exact) return exact;
+    let sub = this.nodes.find(n => (n.name ?? n.id).toLowerCase().includes(q));
+    if (sub) return sub;
+    let pre = this.nodes.find(n => (n.name ?? n.id).toLowerCase().startsWith(q));
+    if (pre) return pre;
+    return null;
   }
 
-
-  // Neighbor map for highlighting
+  // Neighbor highlight support
   buildNeighborSets() {
     this.neighbors = new Map();
     this.nodes.forEach(n => this.neighbors.set(n.id, new Set([n.id])));
@@ -215,7 +207,6 @@ export class Graph {
       this.neighbors.get(b).add(a);
     });
   }
-
   highlightNeighbors(nodeId) {
     if (!this.neighbors) this.buildNeighborSets();
     const nbrs = this.neighbors.get(nodeId) || new Set([nodeId]);
@@ -223,84 +214,15 @@ export class Graph {
     this.nodeSel.classed('dimmed', d => !nbrs.has(d.id));
     this.labelSel.classed('dimmed', d => !nbrs.has(d.id));
     this.linkSel.classed('neighbor', d => (nbrs.has(d.source.id ?? d.source) && nbrs.has(d.target.id ?? d.target)))
-            .classed('dimmed', d => !(nbrs.has(d.source.id ?? d.source) && nbrs.has(d.target.id ?? d.target)));
+                .classed('dimmed', d => !(nbrs.has(d.source.id ?? d.source) && nbrs.has(d.target.id ?? d.target)));
   }
-
   clearHighlight() {
     this.nodeSel.classed('dimmed', false).classed('neighbor', false);
     this.labelSel.classed('dimmed', false);
     this.linkSel.classed('dimmed', false).classed('neighbor', false);
   }
 
-  exportSVG() {
-    const svgNode = this.svg.node();
-    const clone = svgNode.cloneNode(true);
-    const serializer = new XMLSerializer();
-    let source = serializer.serializeToString(clone);
-    if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
-      source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-    }
-    const blob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'network.svg'; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  exportPNG(scale = 2) {
-    const svgNode = this.svg.node();
-    const clone = svgNode.cloneNode(true);
-    const serializer = new XMLSerializer();
-    let source = serializer.serializeToString(clone);
-    if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
-      source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-    }
-    const svgBlob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
-    const url = URL.createObjectURL(svgBlob);
-    const img = new Image();
-    const vb = svgNode.viewBox.baseVal;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = vb.width * scale;
-      canvas.height = vb.height * scale;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((blob) => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'network.png';
-        a.click();
-      });
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
-  }
-
-  // Layout save/load
-  getLayout() {
-    const layout = {};
-    this.nodes.forEach(n => { layout[n.id] = { x: n.x, y: n.y }; });
-    return layout;
-  }
-  applyLayout(layout) {
-    if (!layout) return;
-    this.nodes.forEach(n => {
-      const p = layout[n.id];
-      if (p && isFinite(p.x) && isFinite(p.y)) { n.x = p.x; n.y = p.y; n.fx = p.x; n.fy = p.y; }
-    });
-    this.sim.alpha(0.5).restart();
-  }
-  recolorNodes() {
-    this.nodeG.selectAll('circle').attr('fill', d => this.colorScale(d[this.colorAttr]));
-  }
-
-  setFilterAttr(attr) {
-    this.filterAttr = attr;
-    this.selectedFilterValues = new Set(); // will be re-initialized to all in buildLegend
-    this.buildLegendAndFilters();
-    this.applyFilters();
-  }
-
+  // Legend + Filters
   buildLegendAndFilters() {
     const legend = d3.select('#legend'); legend.selectAll('*').remove();
     if (!this.filterAttr) return;
@@ -316,21 +238,16 @@ export class Graph {
     merged.classed('selected', v => this.selectedFilterValues.has(v))
           .classed('unselected', v => !this.selectedFilterValues.has(v));
     items.exit().remove();
-  }
 
-  toggleValue(v) {
-    if (this.selectedFilterValues.has(v)) this.selectedFilterValues.delete(v);
-    else this.selectedFilterValues.add(v);
-    this.updateLegendSelection();
-    this.applyFilters();
+    document.getElementById('btnSelectAll').onclick = () => { this.selectedFilterValues = new Set(values); this.updateLegendSelection(); this.applyFilters(); };
+    document.getElementById('btnUnselectAll').onclick = () => { this.selectedFilterValues = new Set(); this.updateLegendSelection(); this.applyFilters(); };
   }
-
   updateLegendSelection() {
     d3.select('#legend').selectAll('.legend-item')
       .classed('selected', v => this.selectedFilterValues.has(v))
       .classed('unselected', v => !this.selectedFilterValues.has(v));
   }
-
+  toggleValue(v) { if (this.selectedFilterValues.has(v)) this.selectedFilterValues.delete(v); else this.selectedFilterValues.add(v); this.updateLegendSelection(); this.applyFilters(); }
   applyFilters() {
     const active = this.selectedFilterValues;
     const isVisible = (d) => !this.filterAttr || active.has(d[this.filterAttr]);
@@ -340,21 +257,39 @@ export class Graph {
     this.linkSel.classed('hidden', d => !(visibleIds.has(d.source.id ?? d.source) && visibleIds.has(d.target.id ?? d.target)));
   }
 
+  // recolor helpers
+  recolor(attr) {
+    this.colorAttr = attr;
+    this.rebuildColorScale();
+    this.recolorNodes();
+    this.buildLegendAndFilters();
+  }
+  recolorNodes() { this.nodeG.selectAll('circle').attr('fill', d => this.colorScale(d[this.colorAttr])); }
+
+  // public helpers
+  getNodes() { return this.nodes; }
+  getLinks() { return this.links; }
+  setRadiusProvider(fn) { this.radiusProvider = fn || ((d)=>hooks.nodeRadius(d)); this.redrawNodeSizes(); this.sim.force('collide', d3.forceCollide().radius(d => this.radiusProvider(d) + 2)); this.sim.alpha(0.2).restart(); }
+  redrawNodeSizes() { this.nodeG.selectAll('circle').attr('r', d => this.radiusProvider(d)); }
+
+  // Filters and search helpers
+  populateSearch() {
+    const datalist = document.getElementById('suggestions');
+    datalist.innerHTML = '';
+    this.nodes.forEach(n => { const option = document.createElement('option'); option.value = n.name ?? n.id; datalist.appendChild(option); });
+  }
+
+  setFilterAttr(attr) {
+    this.filterAttr = attr;
+    this.selectedFilterValues = new Set();
+    this.buildLegendAndFilters();
+    this.applyFilters();
+  }
+
   reset() {
-    // clear fixed positions and restart sim; reset zoom
     this.nodes.forEach(n => { n.fx = null; n.fy = null; });
     this.sim.alpha(1).restart();
     this.svg.transition().duration(500).call(this.zoom.transform, d3.zoomIdentity);
     this.clearHighlight();
-  }
-
-  populateSearch() {
-    const datalist = document.getElementById('suggestions');
-    datalist.innerHTML = '';
-    this.nodes.forEach(n => {
-      const option = document.createElement('option');
-      option.value = n.name ?? n.id;
-      datalist.appendChild(option);
-    });
   }
 }
