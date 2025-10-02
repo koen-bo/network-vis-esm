@@ -77,7 +77,9 @@ function computeMetrics(nodes, links, useWeights, gamma=1.0) {
   for (let u=0; u<N; u++) {
     const id = idxToId[u];
     nodeMetrics[id] = {
-      degree_in, degree_out, degree_total,
+      degree_in: deg_in[u],
+      degree_out: deg_out[u],
+      degree_total: deg_total[u],
       degree_in_w: deg_in_w[u],
       degree_out_w: deg_out_w[u],
       degree_total_w: deg_total_w[u],
