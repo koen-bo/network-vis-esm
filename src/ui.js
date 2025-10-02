@@ -70,7 +70,17 @@ export function mountUI(graph) {
   });
 
   // ===== Reset =====
-  document.getElementById('btnResetVis').onclick = () => graph.reset();
+    // --- helpers -------------------------------------------------
+  const $ = (id) => document.getElementById(id);
+  const on = (id, type, handler) => { const el = $(id); if (el) el.addEventListener(type, handler); };
+
+  // --- old reset button (guarded so it won't break if missing) --
+  on('btnResetVis', 'click', () => graph.reset());  // OK if it still exists
+
+  // --- new canvas corner buttons -------------------------------
+  on('btnResetForces', 'click', () => graph.resetForces());
+  on('btnFitToScreen', 'click', () => graph.fitToScreen(24));
+
 
   // ===== Color / Filter dropdowns =====
   const colorSel = document.getElementById('colorAttr');
@@ -165,7 +175,7 @@ export function mountUI(graph) {
   setSpin(true);
   try {
     const payload = {
-      nodes: graph.getNodes().map(n => ({ id: n.id })), // minimal payload
+      nodes: graph.getNodes().map(n => ({ id: n.id })),
       links: graph.getLinks().map(l => ({
         source: (l.source.id ?? l.source),
         target: (l.target.id ?? l.target),
@@ -177,7 +187,6 @@ export function mountUI(graph) {
 
     let out;
     if (chkUsePython && chkUsePython.checked) {
-      // ---- Python backend path ----
       const resp = await fetch(PY_METRICS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -189,59 +198,103 @@ export function mountUI(graph) {
       }
       out = await resp.json();
     } else {
-      // ---- JS worker fallback ----
       out = await runner.compute(payload);
     }
 
     // === 1) Annotate nodes with metrics ===
     const nm = out.nodeMetrics || {};
+    const communities = out.communities || {};
+    
+    console.log('Communities from backend:', communities);
+    
     graph.getNodes().forEach(n => {
       const m = nm[n.id];
-      if (!m) return;
-      n.degree_in_w     = m.degree_in_w;
-      n.degree_out_w    = m.degree_out_w;
-      n.degree_total_w  = m.degree_total_w;
-      n.eigenvector_raw = m.eigenvector_raw;
-      n.eigenvector     = m.eigenvector;
-      n.community_id    = (out.communities || {})[n.id];
+      if (m) {
+        n.degree_in_w     = m.degree_in_w;
+        n.degree_out_w    = m.degree_out_w;
+        n.degree_total_w  = m.degree_total_w;
+        n.eigenvector_raw = m.eigenvector_raw;
+        n.eigenvector     = m.eigenvector;
+      }
+      // IMPORTANT: Set community_id as a string for consistent coloring
+      n.community_id = String(communities[n.id] ?? -1);
     });
+    
+    console.log('Sample node after annotation:', graph.getNodes()[0]);
 
     // === 2) Annotate edges with flags ===
     graph.getLinks().forEach((l, i) => {
       const f = (out.edgeFlags || {})[i];
-      if (!f) return;
-      l.intraCommunity = f.intraCommunity;
-      l.bridgeEdge     = f.bridgeEdge;
+      if (f) {
+        l.intraCommunity = f.intraCommunity;
+        l.bridgeEdge     = f.bridgeEdge;
+      }
     });
 
-    // >>> IMPORTANT: mark metrics as available *before* sizing logic runs
+    // Mark metrics as computed
     MetricsState.computed = true;
 
-    // === 3) Force repaint for current color + prep for size ===
-    graph.recolor(graph.colorAttr); // repaint with current color attribute
-
-    // === 4) (Re)build degree domains for sizing & apply size provider now ===
+    // === 3) Build degree domains for sizing ===
     const keys = ['degree_total_w','degree_in_w','degree_out_w'];
     keys.forEach(k => {
       const vals = graph.getNodes().map(n => Number(n[k]) || 0);
       MetricsState.domains[k] = { min: Math.min(...vals), max: Math.max(...vals) };
     });
-    graph.setRadiusProvider(buildRadiusProvider()); // now MetricsState.computed === true
 
-    // === 5) Update dropdowns & explicitly switch to community coloring ===
+    // === 4) CRITICAL: Rebind data to D3 selections so new attributes are available ===
+    // Update the data binding without restarting simulation
+    graph.nodeSel = graph.nodeG.selectAll('g.node').data(graph.nodes, d => d.id);
+    graph.labelSel = graph.labelG.selectAll('text').data(graph.nodes, d => d.id);
+    graph.linkSel = graph.linkG.selectAll('line').data(graph.links, d => d.id || (d.id = Math.random().toString(36).slice(2)));
+
+    console.log('Data rebound to D3 selections');
+
+    // === 5) Update dropdowns FIRST (so community_id appears as option) ===
     refreshAttrDropdowns();
+
+    // === 6) Switch to community coloring ===
     const colorSel = document.getElementById('colorAttr');
     const filterSel = document.getElementById('filterAttr');
-    if ([...colorSel.options].some(o => o.value === 'community_id')) {
-      colorSel.value = 'community_id';
-      filterSel.value = 'community_id';
-      graph.setFilterAttr('community_id');
-      graph.recolor('community_id'); // direct call avoids event race
-    } else {
-      graph.recolor(graph.colorAttr);
-    }
+    
+    // Set dropdown values
+    colorSel.value = 'community_id';
+    filterSel.value = 'community_id';
+    
+    console.log('Dropdown values set to community_id');
+    
+    // Update graph's internal state and rebuild color scale
+    graph.colorAttr = 'community_id';
+    graph.filterAttr = 'community_id';
+    
+    console.log('About to rebuild color scale for:', graph.colorAttr);
+    
+    graph.rebuildColorScale();
+    
+    console.log('Color scale built. Testing scale with sample values:');
+    const uniqueCommunities = [...new Set(graph.getNodes().map(n => n.community_id))];
+    console.log('Unique communities:', uniqueCommunities);
+    uniqueCommunities.slice(0, 3).forEach(c => {
+      console.log(`  community ${c} -> color ${graph.colorScale(c)}`);
+    });
+    
+    // Rebuild legend and filters for community_id
+    graph.selectedFilterValues = new Set();
+    graph.buildLegendAndFilters();
+    
+    console.log('About to recolor nodes');
+    
+    // Recolor nodes with new scale
+    graph.recolorNodes();
+    
+    console.log('Nodes recolored');
+    
+    // Apply filters
+    graph.applyFilters();
 
-    // === 6) Summary ===
+    // === 6) Apply radius provider ===
+    graph.setRadiusProvider(buildRadiusProvider());
+
+    // === 7) Summary ===
     const commCount = new Set(graph.getNodes().map(n => n.community_id)).size;
     const top = (out.topEigenvector || [])
       .map(t => `${t.id}: ${Number(t.score).toFixed(3)}`)
@@ -312,6 +365,9 @@ export function mountUI(graph) {
   };
 }
 
+
+  if (btnResetForces) btnResetForces.onclick = () => graph.resetForces();
+  if (btnFitToScreen) btnFitToScreen.onclick = () => graph.fitToScreen(24);
 
   sizeSel.onchange = () => graph.setRadiusProvider(buildRadiusProvider());
   minR.oninput = () => { syncRLabels(); graph.setRadiusProvider(buildRadiusProvider()); };

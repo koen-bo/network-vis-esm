@@ -90,3 +90,55 @@ button.ghost { background: transparent; border: 1px dashed #283146; color: var(-
 @media (max-width: 1100px) {
   body { grid-template-columns: 1fr; grid-template-areas: "toolbar" "canvas" "sidebar" "inspector"; }
 }
+
+/* Ensure the canvas and SVG fill the available area and don’t scroll */
+#canvas {
+  position: relative;
+  overflow: hidden; /* prevents scrollbars */
+}
+
+#canvas svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Remove default page margins */
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Canvas overlay controls (fixed in the corner, not affected by zoom/pan) */
+.canvas-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  gap: 8px;
+  z-index: 20;
+}
+
+.canvas-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border-radius: 8px;
+  background: #0b1220;
+  border: 1px solid #172036;
+  color: #e5e7eb;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  cursor: pointer;
+}
+
+.canvas-controls button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.canvas-controls svg {
+  display: block;
+  pointer-events: none;
+}

@@ -10,7 +10,7 @@ function buildColorScale(values) {
     '#fbbf24','#4ade80','#93c5fd','#fca5a5','#22c55e','#eab308','#06b6d4','#d946ef','#10b981','#f97316'
   ];
   const m = new Map(); let i = 0;
-  values.forEach(v => { if(!m.has(v)) m.set(v, scheme[i++ % scheme.length]); });
+  values.forEach(v => { if (!m.has(v)) m.set(v, scheme[i++ % scheme.length]); });
   return (v) => m.get(v) || '#94a3b8';
 }
 
@@ -43,20 +43,51 @@ export class Graph {
     // radius provider (can be overridden by UI)
     this.radiusProvider = (d) => hooks.nodeRadius(d);
 
+    // Zoom/pan
     this.zoom = d3.zoom().scaleExtent([CONFIG.ui.zoomMin, CONFIG.ui.zoomMax]).on('zoom', (event) => {
       this.g.attr('transform', event.transform);
     });
     this.svg.call(this.zoom);
 
+    // Forces (gentle compactness to reduce elongation)
     this.sim = d3.forceSimulation()
       .force('link', d3.forceLink().id(d => d.id).distance(CONFIG.forces.linkDistance))
       .force('charge', d3.forceManyBody().strength(CONFIG.forces.charge))
-      .force('center', d3.forceCenter(600, 400))
-      .force('collide', d3.forceCollide().radius(d => this.radiusProvider(d) + 2));
+      .force('center', d3.forceCenter(0, 0))
+      .force('collide', d3.forceCollide().radius(d => this.radiusProvider(d) + 2))
+      .force('x', d3.forceX(0).strength(0.025))
+      .force('y', d3.forceY(0).strength(0.025))
+      .force('radial', d3.forceRadial(0, 0, 0).strength(0.006));
 
     this.linkSel = null;
     this.nodeSel = null;
     this.labelSel = null;
+
+    this.updateForcesForViewport();
+    window.addEventListener('resize', () => this.updateForcesForViewport());
+  }
+
+  // Measure the actual SVG viewport on screen
+  getViewportSize() {
+    const r = this.svg.node()?.getBoundingClientRect();
+    return { w: Math.max(1, r?.width || 1200), h: Math.max(1, r?.height || 800) };
+  }
+
+  // Re-center forces to viewport center
+  updateForcesForViewport() {
+    const { w, h } = this.getViewportSize();
+    const cx = w / 2, cy = h / 2;
+    this.sim.force('center', d3.forceCenter(cx, cy));
+    this.sim.force('x', d3.forceX(cx).strength(0.025));
+    this.sim.force('y', d3.forceY(cy).strength(0.025));
+    this.sim.force('radial', d3.forceRadial(0, cx, cy).strength(0.006));
+    this.sim.alpha(0.1).restart();
+  }
+
+  // Reset any previous transform before computing a new absolute transform
+  _resetZoomIdentity() {
+    this.svg.attr('viewBox', null);
+    this.svg.call(this.zoom.transform, d3.zoomIdentity);
   }
 
   setData(newNodes, newLinks) {
@@ -73,6 +104,9 @@ export class Graph {
     this.buildNeighborSets();
     this.populateSearch();
     this.buildLegendAndFilters();
+
+    // Fit after short settle
+    d3.timeout(() => this.fitToScreen(24), 600);
   }
 
   nodeAttrs() {
@@ -101,16 +135,18 @@ export class Graph {
     this.nodeSel.exit().remove();
     const nodeEnter = this.nodeSel.enter().append('g')
       .attr('class', 'node')
-      .call(d3.drag().on('start', (ev,d)=>this.dragstarted(ev,d)).on('drag', (ev,d)=>this.dragged(ev,d)).on('end', (ev,d)=>this.dragended(ev,d)))
-      .on('click', (_, d) => this.selectNode(d))
+      .call(d3.drag()
+        .on('start', (ev,d)=>this.dragstarted(ev,d))
+        .on('drag',  (ev,d)=>this.dragged(ev,d))
+        .on('end',   (ev,d)=>this.dragended(ev,d)))
+      .on('click',   (_, d) => this.selectNode(d))
       .on('mouseover', (_, d) => { this.showTooltip(d); this.highlightNeighbors(d.id); })
-      .on('mouseout', () => { this.hideTooltip(); this.clearHighlight(); })
-      .on('dblclick', (_, d) => { d.fx = null; d.fy = null; this.sim.alpha(0.7).restart(); });
+      .on('mouseout',  () => { this.hideTooltip(); this.clearHighlight(); })
+      .on('dblclick',  (_, d) => { d.fx = null; d.fy = null; this.sim.alpha(0.7).restart(); });
 
     nodeEnter.append('circle')
-      .attr('r', d => this.radiusProvider(d))
+      .attr('r',    d => this.radiusProvider(d))
       .attr('fill', d => this.colorScale(d[this.colorAttr]));
-
     this.nodeSel = nodeEnter.merge(this.nodeSel);
 
     // Labels
@@ -119,13 +155,14 @@ export class Graph {
     const labelEnter = this.labelSel.enter().append('text')
       .attr('class', 'node-label')
       .attr('text-anchor', 'middle')
-      .attr('dy', -12)
+      .attr('dy', d => -(this.radiusProvider(d) + 2)) // closer than before
       .text(d => hooks.labelText(d));
     this.labelSel = labelEnter.merge(this.labelSel);
 
     // Sim
     this.sim.nodes(this.nodes).on('tick', () => this.ticked());
     this.sim.force('link').links(this.links);
+    this.updateForcesForViewport();
     this.sim.alpha(1).restart();
 
     this.applyFilters();
@@ -136,8 +173,13 @@ export class Graph {
     this.linkSel
       .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
       .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+
     this.nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
-    this.labelSel.attr('x', d => d.x).attr('y', d => d.y - 12);
+
+    // labels stay just above the circle edge (radius + 2)
+    this.labelSel
+      .attr('x', d => d.x)
+      .attr('y', d => d.y - (this.radiusProvider(d) + 2));
   }
 
   dragstarted(event, d) { if (!event.active) this.sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
@@ -145,11 +187,11 @@ export class Graph {
   dragended(event, d) { if (!event.active) this.sim.alphaTarget(0); }
 
   showTooltip(d) {
-    const rect = document.getElementById('canvas').getBoundingClientRect();
+    const rect = this.svg.node()?.getBoundingClientRect() ?? { left:0, top:0 };
     d3.select('#tooltip')
       .html(`<b>${safe(d.name ?? d.id)}</b><br/><span class="hint">${safe(hooks.tooltipLine2(d))}</span>`)
       .style('left', (d.x + rect.left + 14) + 'px')
-      .style('top', (d.y + rect.top - 10) + 'px')
+      .style('top',  (d.y + rect.top  - 10) + 'px')
       .style('opacity', 1);
   }
   hideTooltip() { d3.select('#tooltip').style('opacity', 0); }
@@ -175,10 +217,19 @@ export class Graph {
     let target = this.nodes.find(n => (n.name ?? n.id).toLowerCase() === name.toLowerCase());
     if (!target) target = this.fuzzyFindNode(name);
     if (!target) return false;
+
     this.selectNode(target);
+
+    // Work in absolute/world coords: reset zoom first
+    this._resetZoomIdentity();
+
     const k = CONFIG.ui.focusScale;
-    const width = this.svg.node().clientWidth, height = this.svg.node().clientHeight;
-    const t = d3.zoomIdentity.translate(width/2, height/2).scale(k).translate(-target.x, -target.y);
+    const { w, h } = this.getViewportSize();
+    const t = d3.zoomIdentity
+      .translate(w / 2, h / 2)
+      .scale(k)
+      .translate(-target.x, -target.y);
+
     this.svg.transition().duration(700).call(this.zoom.transform, t);
     this.nodeSel.selectAll('circle').classed('highlight', n => n.id === target.id);
     return true;
@@ -264,13 +315,72 @@ export class Graph {
     this.recolorNodes();
     this.buildLegendAndFilters();
   }
-  recolorNodes() { this.nodeG.selectAll('circle').attr('fill', d => this.colorScale(d[this.colorAttr])); }
+
+  recolorNodes() {
+    // Use nodeSel so circles inherit the parent <g> data
+    this.nodeSel.select('circle')
+      .attr('fill', d => this.colorScale(d[this.colorAttr]));
+  }
+
+  // === Fit to screen (zoom to fit) using node positions + radii ===
+  fitToScreen(padding = 24) {
+    if (!this.nodes.length) return;
+
+    // 1) Work in world coords: clear viewBox & reset zoom
+    this._resetZoomIdentity();
+
+    // 2) Tight bounds from node positions + radii
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of this.nodes) {
+      const r = this.radiusProvider(n) || 0;
+      const x0 = n.x - r, x1 = n.x + r;
+      const y0 = n.y - r, y1 = n.y + r;
+      if (x0 < minX) minX = x0;
+      if (y0 < minY) minY = y0;
+      if (x1 > maxX) maxX = x1;
+      if (y1 > maxY) maxY = y1;
+    }
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return;
+
+    const dx = maxX - minX;
+    const dy = maxY - minY;
+    if (dx <= 0 || dy <= 0) return;
+
+    // 3) Compute absolute transform to fit bounds into the actual SVG viewport
+    const r = this.svg.node().getBoundingClientRect();
+    const w = Math.max(1, r.width), h = Math.max(1, r.height);
+    const scale = Math.min((w - 2 * padding) / dx, (h - 2 * padding) / dy);
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    const t = d3.zoomIdentity
+      .translate(w / 2, h / 2)
+      .scale(scale)
+      .translate(-cx, -cy);
+
+    // 4) Apply the absolute transform
+    this.svg.transition().duration(500).call(this.zoom.transform, t);
+  }
 
   // public helpers
   getNodes() { return this.nodes; }
   getLinks() { return this.links; }
-  setRadiusProvider(fn) { this.radiusProvider = fn || ((d)=>hooks.nodeRadius(d)); this.redrawNodeSizes(); this.sim.force('collide', d3.forceCollide().radius(d => this.radiusProvider(d) + 2)); this.sim.alpha(0.2).restart(); }
-  redrawNodeSizes() { this.nodeG.selectAll('circle').attr('r', d => this.radiusProvider(d)); }
+
+  setRadiusProvider(fn) {
+    this.radiusProvider = fn || ((d)=>hooks.nodeRadius(d));
+    this.redrawNodeSizes();
+    this.sim.force('collide', d3.forceCollide().radius(d => this.radiusProvider(d) + 2));
+    this.sim.alpha(0.2).restart();
+  }
+
+  redrawNodeSizes() {
+    // Resize circles using the current provider
+    this.nodeSel.select('circle')
+      .attr('r', d => this.radiusProvider(d));
+    // Labels sit just above the circle rim (closer)
+    this.labelSel.attr('dy', d => -(this.radiusProvider(d) + 2));
+  }
 
   // Filters and search helpers
   populateSearch() {
@@ -284,12 +394,22 @@ export class Graph {
     this.selectedFilterValues = new Set();
     this.buildLegendAndFilters();
     this.applyFilters();
+    d3.timeout(() => this.fitToScreen(24), 200);
   }
 
-  reset() {
+  resetForces() {
+    // release pinned nodes and gently re-run the sim, no zooming here
     this.nodes.forEach(n => { n.fx = null; n.fy = null; });
-    this.sim.alpha(1).restart();
-    this.svg.transition().duration(500).call(this.zoom.transform, d3.zoomIdentity);
+    this.updateForcesForViewport();
+    this.sim.alpha(0.5).restart();
     this.clearHighlight();
   }
+
+
+  reset() {
+    this.resetForces();
+    // one fit after a short settle
+    d3.timeout(() => this.fitToScreen(24), 700);
+  }
+
 }
