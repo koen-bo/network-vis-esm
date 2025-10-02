@@ -231,8 +231,11 @@ export function mountUI(graph) {
     // === 5) Update dropdowns & explicitly switch to community coloring ===
     refreshAttrDropdowns();
     const colorSel = document.getElementById('colorAttr');
+    const filterSel = document.getElementById('filterAttr');
     if ([...colorSel.options].some(o => o.value === 'community_id')) {
       colorSel.value = 'community_id';
+      filterSel.value = 'community_id';
+      graph.setFilterAttr('community_id');
       graph.recolor('community_id'); // direct call avoids event race
     } else {
       graph.recolor(graph.colorAttr);
